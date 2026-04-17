@@ -1,34 +1,38 @@
-# Smart Farm Simulator Backend MVP
+# Smart Farm Simulator
 
-## File Structure
+## Project Structure
 
 ```text
 Farm-simulator-AI/
-├── README.md
-└── backend/
-    ├── app.py
-    ├── config.py
-    ├── models.py
-    ├── requirements.txt
-    ├── instance/
-    │   └── app.db
-    └── routes/
-        ├── __init__.py
-        ├── auth.py
-        └── simulator.py
+|-- README.md
+|-- backend/
+|   |-- app.py
+|   |-- config.py
+|   |-- models.py
+|   |-- requirements.txt
+|   |-- instance/
+|   |   `-- app.db
+|   `-- routes/
+|       |-- __init__.py
+|       |-- auth.py
+|       `-- simulator.py
+`-- frontend/
+    |-- index.html
+    |-- package.json
+    |-- postcss.config.js
+    |-- tailwind.config.js
+    |-- vite.config.js
+    `-- src/
+        |-- App.jsx
+        |-- index.css
+        |-- main.jsx
+        |-- components/
+        |-- context/
+        |-- pages/
+        `-- services/
 ```
 
-## What This Backend Includes
-
-- Flask API with blueprint-based routing
-- SQLite database at `backend/instance/app.db`
-- JWT authentication with 1 hour access-token expiry
-- Password hashing with Werkzeug
-- Password reset flow using secure time-limited tokens
-- CORS enabled for `http://localhost:5173`
-- Protected `/predict` simulator endpoint
-
-## Install
+## Backend Setup
 
 From the project root:
 
@@ -39,220 +43,72 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## Run
-
-From the `backend` folder:
+Run the Flask API:
 
 ```powershell
 $env:FLASK_APP="app.py"
 python -m flask run --port=5000
 ```
 
-The API will be available at `http://localhost:5000`.
-
-## Auth API
-
-### `POST /auth/register`
-
-Request body:
-
-```json
-{
-  "name": "Bhanu",
-  "email": "bhanu@example.com",
-  "password": "StrongPass123"
-}
-```
-
-Success response:
-
-```json
-{
-  "message": "User registered successfully"
-}
-```
-
-### `POST /auth/login`
-
-Request body:
-
-```json
-{
-  "email": "bhanu@example.com",
-  "password": "StrongPass123"
-}
-```
-
-Success response:
-
-```json
-{
-  "access_token": "JWT_TOKEN",
-  "user": {
-    "id": 1,
-    "name": "Bhanu",
-    "email": "bhanu@example.com"
-  }
-}
-```
-
-### `POST /auth/forgot-password`
-
-Request body:
-
-```json
-{
-  "email": "bhanu@example.com"
-}
-```
-
-Behavior:
-
-- Generates a secure reset token valid for 15 minutes
-- Prints this to the backend console:
+Backend base URL:
 
 ```text
-RESET LINK: http://localhost:5173/reset-password?token=XYZ
+http://localhost:5000
 ```
 
-Response:
+## Frontend Setup
 
-```json
-{
-  "message": "If email exists, reset link has been sent",
-  "reset_token": "XYZ"
-}
+Open a new terminal from the project root:
+
+```powershell
+cd frontend
+npm install
+npm run dev
 ```
 
-### `POST /auth/reset-password`
-
-Request body:
-
-```json
-{
-  "token": "XYZ",
-  "new_password": "NewStrongPass123"
-}
-```
-
-Success response:
-
-```json
-{
-  "message": "Password reset successfully"
-}
-```
-
-## Protected Simulator API
-
-### `POST /predict`
-
-Headers:
+Frontend dev server:
 
 ```text
-Authorization: Bearer YOUR_JWT_TOKEN
-Content-Type: application/json
+http://localhost:5173
 ```
 
-Request body:
+The frontend is already configured to call the backend at `http://localhost:5000`, and the Flask backend already allows CORS from `http://localhost:5173`.
 
-```json
-{
-  "rainfall": 210,
-  "temperature": 27,
-  "humidity": 74,
-  "soil_type": "Loamy"
-}
-```
+## Frontend Features
 
-Response shape:
+- React 18 + Vite
+- Tailwind CSS
+- React Router protected routes
+- Axios instance with JWT interceptor
+- Auth state with React Context API
+- Login, register, forgot password, and reset password pages
+- Protected simulator page with yield cards, best crop highlight, and Recharts bar chart
+- Toast notifications via `sonner`
 
-```json
-{
-  "inputs": {
-    "rainfall": 210.0,
-    "temperature": 27.0,
-    "humidity": 74.0,
-    "soil_type": "Loamy"
-  },
-  "predictions": {
-    "Rice": {
-      "predicted_yield": 6.11,
-      "profit": 134.42,
-      "risk_level": "Low",
-      "explanation": "..."
-    },
-    "Wheat": {
-      "predicted_yield": 4.37,
-      "profit": 78.66,
-      "risk_level": "High",
-      "explanation": "..."
-    },
-    "Corn": {
-      "predicted_yield": 9.05,
-      "profit": 144.8,
-      "risk_level": "Low",
-      "explanation": "..."
-    }
-  },
-  "recommended_crop": {
-    "name": "Corn",
-    "predicted_yield": 9.05,
-    "profit": 144.8,
-    "risk_level": "Low",
-    "explanation": "..."
-  }
-}
-```
+## Auth Flow
 
-## Test With curl
+1. Register at `/register`
+2. The frontend auto-logs in after successful registration
+3. Login stores `user` and `token` in `localStorage`
+4. Protected routes redirect unauthenticated users to `/login`
+5. Forgot password posts to `/auth/forgot-password`
+6. Reset password reads the `token` from `/reset-password?token=XYZ`
+7. Logout clears local auth state and redirects to `/login`
 
-Register:
+## Backend Endpoints Used By Frontend
 
-```powershell
-curl -X POST http://localhost:5000/auth/register `
-  -H "Content-Type: application/json" `
-  -d "{\"name\":\"Bhanu\",\"email\":\"bhanu@example.com\",\"password\":\"StrongPass123\"}"
-```
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/forgot-password`
+- `POST /auth/reset-password`
+- `POST /predict`
 
-Login:
+## Quick Test
 
-```powershell
-curl -X POST http://localhost:5000/auth/login `
-  -H "Content-Type: application/json" `
-  -d "{\"email\":\"bhanu@example.com\",\"password\":\"StrongPass123\"}"
-```
-
-Forgot password:
-
-```powershell
-curl -X POST http://localhost:5000/auth/forgot-password `
-  -H "Content-Type: application/json" `
-  -d "{\"email\":\"bhanu@example.com\"}"
-```
-
-Reset password:
-
-```powershell
-curl -X POST http://localhost:5000/auth/reset-password `
-  -H "Content-Type: application/json" `
-  -d "{\"token\":\"PASTE_TOKEN_HERE\",\"new_password\":\"NewStrongPass123\"}"
-```
-
-Predict:
-
-```powershell
-curl -X POST http://localhost:5000/predict `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" `
-  -d "{\"rainfall\":210,\"temperature\":27,\"humidity\":74,\"soil_type\":\"Loamy\"}"
-```
-
-## Postman Flow
-
-1. Register a user with `POST /auth/register`
-2. Log in with `POST /auth/login`
-3. Copy `access_token` from the response
-4. Call `POST /predict` with `Authorization -> Bearer Token`
-5. Use `POST /auth/forgot-password` to get a test reset token
-6. Use that token in `POST /auth/reset-password`
+1. Start the backend on port `5000`
+2. Start the frontend on port `5173`
+3. Open [http://localhost:5173](http://localhost:5173)
+4. Register a new account
+5. You should be redirected to `/simulator`
+6. Run a simulation with rainfall, temperature, humidity, and soil type
+7. Use forgot password to generate a reset token, then open the reset link shown in the backend console
