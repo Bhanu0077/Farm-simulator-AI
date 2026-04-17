@@ -94,6 +94,24 @@ export default function Simulator() {
         params: { location: weatherLocation.trim() },
       });
       setWeather(response.data);
+      setFormData((current) => ({
+        ...current,
+        rainfall:
+          response.data.current_weather?.precipitation !== null &&
+          response.data.current_weather?.precipitation !== undefined
+            ? String(response.data.current_weather.precipitation)
+            : current.rainfall,
+        temperature:
+          response.data.current_weather?.temperature !== null &&
+          response.data.current_weather?.temperature !== undefined
+            ? String(response.data.current_weather.temperature)
+            : current.temperature,
+        humidity:
+          response.data.current_weather?.humidity !== null &&
+          response.data.current_weather?.humidity !== undefined
+            ? String(response.data.current_weather.humidity)
+            : current.humidity,
+      }));
       toast.success("Weather fetched");
     } catch (error) {
       toast.error(error.response?.data?.error || "Unable to fetch weather");
@@ -231,6 +249,10 @@ export default function Simulator() {
               </div>
             </div>
           ) : null}
+
+          <p className="mt-4 text-sm text-stone-300">
+            After lookup, temperature, humidity, and precipitation are automatically filled into the simulator inputs below.
+          </p>
         </section>
 
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">

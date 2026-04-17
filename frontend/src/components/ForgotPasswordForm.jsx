@@ -45,7 +45,7 @@ export default function ForgotPasswordForm() {
 
       {successMessage ? (
         <div className="rounded-2xl border border-lime-200/30 bg-lime-300/10 px-4 py-3 text-sm text-lime-100">
-          {successMessage}. Check the backend console for the reset link and test token.
+          {successMessage}. Check your email for the reset link.
         </div>
       ) : null}
 

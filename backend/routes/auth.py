@@ -138,20 +138,15 @@ def register():
         name=name,
         email=email,
         password_hash=generate_password_hash(password),
-        is_verified=False,
+        is_verified=True,
     )
     db.session.add(user)
     db.session.commit()
 
-    otp_code, error_response = _send_otp(user, VERIFY_EMAIL_PURPOSE)
-    if error_response:
-        return error_response
-
     return jsonify(
         {
-            "message": "User registered successfully. Verification OTP sent to email",
+            "message": "User registered successfully",
             "email": user.email,
-            "otp_debug": otp_code,
         }
     ), 201
 
@@ -168,9 +163,6 @@ def login():
     user = User.query.filter_by(email=email).first()
     if not user or not check_password_hash(user.password_hash, password):
         return _error("invalid email or password", 401)
-
-    if not user.is_verified:
-        return _error("email not verified. Please verify OTP before logging in", 403)
 
     return _issue_login_response(user)
 
@@ -257,11 +249,28 @@ def forgot_password():
         token = _generate_reset_token(user.email)
         reset_link = f"http://localhost:5173/reset-password?token={token}"
         print(f"RESET LINK: {reset_link}")
+        subject = "Reset your Smart Farm Simulator password"
+        text = (
+            f"Hello {user.name},\n\n"
+            "We received a request to reset your password.\n"
+            f"Use this link to reset it:\n{reset_link}\n\n"
+            "This link expires in 15 minutes."
+        )
+        html = (
+            f"<p>Hello {user.name},</p>"
+            "<p>We received a request to reset your password.</p>"
+            f'<p><a href="{reset_link}">Reset your password</a></p>'
+            "<p>This link expires in 15 minutes.</p>"
+        )
+        try:
+            send_email(current_app.config, user.email, subject, html, text)
+        except EmailDeliveryError as error:
+            return _error(str(error), 500)
 
     return jsonify(
         {
             "message": "If email exists, reset link has been sent",
-            "reset_token": token,
+            "reset_token": token if current_app.config.get("EMAIL_PROVIDER", "console").lower() == "console" else None,
         }
     ), 200
 
