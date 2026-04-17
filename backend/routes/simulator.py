@@ -1,6 +1,8 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 
+from services.market_service import get_crop_prices
+
 
 simulator_bp = Blueprint("simulator", __name__)
 
@@ -11,13 +13,6 @@ SOIL_FACTORS = {
     "Clay": {"yield": 0.95, "risk": 1},
     "Silt": {"yield": 1.05, "risk": 0},
 }
-
-CROP_PRICES = {
-    "Rice": 22.0,
-    "Wheat": 18.0,
-    "Corn": 16.0,
-}
-
 
 def _error(message, status_code):
     return jsonify({"error": message}), status_code
@@ -31,7 +26,7 @@ def _classify_risk(score):
     return "High"
 
 
-def _crop_metrics(crop_name, rainfall, temperature, humidity, soil_type):
+def _crop_metrics(crop_name, rainfall, temperature, humidity, soil_type, unit_price, acres):
     soil_factor = SOIL_FACTORS[soil_type]
 
     if crop_name == "Rice":
@@ -97,11 +92,15 @@ def _crop_metrics(crop_name, rainfall, temperature, humidity, soil_type):
         )
 
     adjusted_yield = max(1.2, round(base_yield * yield_multiplier * soil_factor["yield"], 2))
+    total_yield = round(adjusted_yield * acres, 2)
     risk_level = _classify_risk(score + soil_factor["risk"])
-    profit = round(adjusted_yield * CROP_PRICES[crop_name], 2)
+    profit = round(total_yield * unit_price, 2)
 
     return {
-        "predicted_yield": adjusted_yield,
+        "predicted_yield_per_acre": adjusted_yield,
+        "total_predicted_yield": total_yield,
+        "acres": acres,
+        "unit_price": unit_price,
         "profit": profit,
         "risk_level": risk_level,
         "explanation": explanation,
@@ -122,15 +121,22 @@ def predict():
         rainfall = float(data["rainfall"])
         temperature = float(data["temperature"])
         humidity = float(data["humidity"])
+        acres = float(data.get("acres", 1))
     except (TypeError, ValueError):
-        return _error("rainfall, temperature, and humidity must be numbers", 400)
+        return _error("rainfall, temperature, humidity, and acres must be numbers", 400)
+
+    if acres <= 0:
+        return _error("acres must be greater than 0", 400)
 
     soil_type = str(data["soil_type"]).strip().title()
     if soil_type not in SOIL_FACTORS:
         return _error("soil_type must be one of: Loamy, Sandy, Clay, Silt", 400)
 
+    market_data = get_crop_prices()
+    prices = market_data["prices"]
+
     predictions = {
-        crop: _crop_metrics(crop, rainfall, temperature, humidity, soil_type)
+        crop: _crop_metrics(crop, rainfall, temperature, humidity, soil_type, prices[crop], acres)
         for crop in ["Rice", "Wheat", "Corn"]
     }
 
@@ -143,7 +149,9 @@ def predict():
                 "temperature": temperature,
                 "humidity": humidity,
                 "soil_type": soil_type,
+                "acres": acres,
             },
+            "pricing": market_data,
             "predictions": predictions,
             "recommended_crop": {
                 "name": best_crop[0],

@@ -8,6 +8,7 @@ from sqlalchemy import inspect, text
 from config import Config, INSTANCE_DIR
 from models import db
 from routes.auth import auth_bp
+from routes.land import land_bp
 from routes.simulator import simulator_bp
 from routes.weather import weather_bp
 
@@ -30,6 +31,7 @@ def create_app():
     )
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(land_bp)
     app.register_blueprint(simulator_bp)
     app.register_blueprint(weather_bp)
 

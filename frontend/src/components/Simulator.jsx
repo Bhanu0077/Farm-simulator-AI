@@ -1,11 +1,25 @@
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { CloudSun, Droplets, Leaf, LogOut, MapPin, Search, Sprout, SunMedium, Trees, Wind } from "lucide-react";
+import {
+  CloudSun,
+  Droplets,
+  FlaskConical,
+  Leaf,
+  LogOut,
+  MapPinned,
+  Mountain,
+  Search,
+  Sprout,
+  SunMedium,
+  Trees,
+  Wind,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import LandSelectionMap from "./LandSelectionMap";
 import LoadingSpinner from "./LoadingSpinner";
 
 
@@ -13,7 +27,8 @@ const initialFormState = {
   rainfall: "",
   temperature: "",
   humidity: "",
-  soil_type: "Loamy",
+  acres: "",
+  soil_type: "",
 };
 
 const cropColors = {
@@ -37,6 +52,15 @@ function MetricCard({ icon: Icon, label, value, helper }) {
 }
 
 
+function formatNumber(value, digits = 2) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "--";
+  }
+
+  return Number(value).toFixed(digits);
+}
+
+
 export default function Simulator() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -46,10 +70,55 @@ export default function Simulator() {
   const [weatherLocation, setWeatherLocation] = useState("");
   const [weather, setWeather] = useState(null);
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
+  const [landSelection, setLandSelection] = useState(null);
+  const [soilProfile, setSoilProfile] = useState(null);
+  const [isFetchingSoil, setIsFetchingSoil] = useState(false);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
     setFormData((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleSelectionChange = async (selection) => {
+    setLandSelection(selection);
+    setSoilProfile(null);
+    setResults(null);
+
+    if (!selection) {
+      setFormData((current) => ({
+        ...current,
+        acres: "",
+        soil_type: "",
+      }));
+      return;
+    }
+
+    setFormData((current) => ({
+      ...current,
+      acres: selection.areaAcres.toFixed(2),
+      soil_type: "",
+    }));
+
+    setIsFetchingSoil(true);
+    try {
+      const response = await api.get("/soil-data", {
+        params: {
+          lat: selection.center.lat,
+          lon: selection.center.lon,
+        },
+      });
+      setSoilProfile(response.data.soil_profile);
+      setFormData((current) => ({
+        ...current,
+        soil_type: response.data.soil_profile.soil_type,
+        acres: selection.areaAcres.toFixed(2),
+      }));
+      toast.success("Soil data fetched");
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Unable to fetch soil data");
+    } finally {
+      setIsFetchingSoil(false);
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -61,7 +130,8 @@ export default function Simulator() {
         rainfall: Number(formData.rainfall),
         temperature: Number(formData.temperature),
         humidity: Number(formData.humidity),
-        soil_type: formData.soil_type,
+        acres: Number(formData.acres),
+        soil_type: formData.soil_type || "Loamy",
       };
 
       const response = await api.post("/predict", payload);
@@ -129,7 +199,7 @@ export default function Simulator() {
   const chartData = results
     ? Object.entries(results.predictions).map(([crop, metrics]) => ({
         crop,
-        yield: metrics.predicted_yield,
+        totalYield: metrics.total_predicted_yield,
         profit: metrics.profit,
       }))
     : [];
@@ -142,7 +212,7 @@ export default function Simulator() {
             <p className="text-sm uppercase tracking-[0.3em] text-lime-200/80">Smart Farm Simulator</p>
             <h1 className="mt-2 text-3xl font-semibold">Welcome back, {user?.name || "Farmer"}</h1>
             <p className="mt-2 max-w-2xl text-sm text-stone-300">
-              Run a crop simulation using your field conditions and compare expected yield, profit, and operational risk across Rice, Wheat, and Corn.
+              Draw your land, fetch SoilGrids data, pull weather for the location, and simulate crop performance with acreage-aware results.
             </p>
           </div>
 
@@ -156,46 +226,134 @@ export default function Simulator() {
           </button>
         </header>
 
-        <section className="mb-6 grid gap-4 md:grid-cols-3">
-          <MetricCard icon={Droplets} label="Rainfall Range" value="90-220 mm" helper="Balanced water planning improves yield confidence." />
-          <MetricCard icon={SunMedium} label="Temperature Range" value="18-30 deg C" helper="Crop stress increases beyond the preferred window." />
-          <MetricCard icon={Trees} label="Supported Soils" value="Loamy / Sandy / Clay / Silt" helper="Soil profile changes yield and risk scoring." />
+        <section className="mb-6 grid gap-4 md:grid-cols-4">
+          <MetricCard icon={MapPinned} label="Land Mapping" value="Polygon Draw" helper="Draw and edit a boundary directly on the map." />
+          <MetricCard icon={Droplets} label="Weather Inputs" value="Auto Fill" helper="Rainfall, temperature, and humidity come from live weather lookup." />
+          <MetricCard icon={Trees} label="Soil Source" value="SoilGrids" helper="Soil type and composition are pulled from online soil data." />
+          <MetricCard icon={Mountain} label="Area Tracking" value={`${formData.acres || "0"} acres`} helper="Simulation profit now scales with the selected land area." />
         </section>
 
-        <section className="mb-6 rounded-[2rem] border border-white/10 bg-white/[0.08] p-6 shadow-glow backdrop-blur-xl">
-          <div className="mb-5 flex items-center gap-3">
-            <CloudSun className="h-6 w-6 text-sky-200" />
-            <div>
-              <h2 className="text-2xl font-semibold">Live Weather Lookup</h2>
-              <p className="text-sm text-stone-300">Check current weather using the free Open-Meteo API before you simulate.</p>
+        <section className="mb-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[2rem] border border-white/10 bg-white/[0.08] p-6 shadow-glow backdrop-blur-xl">
+            <div className="mb-5 flex items-center gap-3">
+              <MapPinned className="h-6 w-6 text-lime-200" />
+              <div>
+                <h2 className="text-2xl font-semibold">Land Selection</h2>
+                <p className="text-sm text-stone-300">
+                  Draw a polygon to calculate land area, find the center point, and fetch soil characteristics.
+                </p>
+              </div>
+            </div>
+
+            <LandSelectionMap onSelectionChange={handleSelectionChange} />
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-[1.25rem] border border-white/10 bg-black/10 p-4">
+                <p className="text-sm text-stone-400">Area (sq m)</p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {landSelection ? formatNumber(landSelection.areaSquareMeters, 0) : "--"}
+                </p>
+              </div>
+              <div className="rounded-[1.25rem] border border-white/10 bg-black/10 p-4">
+                <p className="text-sm text-stone-400">Area (acres)</p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {landSelection ? formatNumber(landSelection.areaAcres) : "--"}
+                </p>
+              </div>
+              <div className="rounded-[1.25rem] border border-white/10 bg-black/10 p-4">
+                <p className="text-sm text-stone-400">Center Latitude</p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {landSelection ? formatNumber(landSelection.center.lat, 5) : "--"}
+                </p>
+              </div>
+              <div className="rounded-[1.25rem] border border-white/10 bg-black/10 p-4">
+                <p className="text-sm text-stone-400">Center Longitude</p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {landSelection ? formatNumber(landSelection.center.lon, 5) : "--"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-black/10 p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <FlaskConical className="h-5 w-5 text-amber-200" />
+                <h3 className="text-lg font-semibold">Soil Summary</h3>
+              </div>
+
+              {isFetchingSoil ? (
+                <div className="text-sm text-stone-300">
+                  <LoadingSpinner size="sm" label="Fetching SoilGrids data..." />
+                </div>
+              ) : soilProfile ? (
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="rounded-2xl bg-white/5 p-4">
+                    <p className="text-sm text-stone-400">Classified Soil Type</p>
+                    <p className="mt-2 text-xl font-semibold">{soilProfile.soil_type}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/5 p-4">
+                    <p className="text-sm text-stone-400">Sand</p>
+                    <p className="mt-2 text-xl font-semibold">{formatNumber(soilProfile.sand)}%</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/5 p-4">
+                    <p className="text-sm text-stone-400">Clay</p>
+                    <p className="mt-2 text-xl font-semibold">{formatNumber(soilProfile.clay)}%</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/5 p-4">
+                    <p className="text-sm text-stone-400">Silt</p>
+                    <p className="mt-2 text-xl font-semibold">{formatNumber(soilProfile.silt)}%</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/5 p-4">
+                    <p className="text-sm text-stone-400">pH</p>
+                    <p className="mt-2 text-xl font-semibold">{formatNumber(soilProfile.ph)}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/5 p-4">
+                    <p className="text-sm text-stone-400">Organic Carbon</p>
+                    <p className="mt-2 text-xl font-semibold">
+                      {formatNumber(soilProfile.organic_carbon_percent)}%
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-stone-300">
+                  Draw a polygon to fetch soil texture, pH, and organic carbon from SoilGrids.
+                </p>
+              )}
             </div>
           </div>
 
-          <form className="grid gap-4 lg:grid-cols-[1fr_auto]" onSubmit={handleWeatherLookup}>
-            <input
-              type="text"
-              value={weatherLocation}
-              onChange={(event) => setWeatherLocation(event.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none transition focus:border-lime-300 focus:ring-4 focus:ring-lime-200/30"
-              placeholder="Enter city or village, e.g. Hyderabad"
-            />
-            <button
-              type="submit"
-              disabled={isFetchingWeather}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-3 font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              <Search className="h-4 w-4" />
-              {isFetchingWeather ? <LoadingSpinner size="sm" label="Checking..." /> : "Check Weather"}
-            </button>
-          </form>
+          <section className="rounded-[2rem] border border-white/10 bg-white/[0.08] p-6 shadow-glow backdrop-blur-xl">
+            <div className="mb-5 flex items-center gap-3">
+              <CloudSun className="h-6 w-6 text-sky-200" />
+              <div>
+                <h2 className="text-2xl font-semibold">Live Weather Lookup</h2>
+                <p className="text-sm text-stone-300">Check current weather using the free Open-Meteo API before you simulate.</p>
+              </div>
+            </div>
 
-          {weather ? (
-            <div className="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-              <div className="rounded-[1.5rem] border border-white/10 bg-black/10 p-5">
-                <div className="mb-4 flex items-start justify-between gap-4">
-                  <div>
+            <form className="grid gap-4 lg:grid-cols-[1fr_auto]" onSubmit={handleWeatherLookup}>
+              <input
+                type="text"
+                value={weatherLocation}
+                onChange={(event) => setWeatherLocation(event.target.value)}
+                className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none transition focus:border-lime-300 focus:ring-4 focus:ring-lime-200/30"
+                placeholder="Enter city or village, e.g. Hyderabad"
+              />
+              <button
+                type="submit"
+                disabled={isFetchingWeather}
+                className="flex items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-3 font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                <Search className="h-4 w-4" />
+                {isFetchingWeather ? <LoadingSpinner size="sm" label="Checking..." /> : "Check Weather"}
+              </button>
+            </form>
+
+            {weather ? (
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/10 p-5">
+                  <div className="mb-4">
                     <div className="flex items-center gap-2 text-lime-200">
-                      <MapPin className="h-4 w-4" />
+                      <MapPinned className="h-4 w-4" />
                       <span className="text-sm font-medium">
                         {weather.location.name}
                         {weather.location.country ? `, ${weather.location.country}` : ""}
@@ -204,62 +362,69 @@ export default function Simulator() {
                     <h3 className="mt-2 text-2xl font-semibold">{weather.current_weather.summary}</h3>
                     <p className="mt-1 text-sm text-stone-300">Observed at {weather.current_weather.observed_at}</p>
                   </div>
-                  <div className="rounded-2xl bg-sky-300/10 px-4 py-3 text-right">
-                    <p className="text-xs uppercase tracking-wide text-stone-400">Temperature</p>
-                    <p className="text-3xl font-semibold text-white">{weather.current_weather.temperature} deg C</p>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-white/5 p-4">
+                      <div className="mb-2 flex items-center gap-2 text-sky-200">
+                        <SunMedium className="h-4 w-4" />
+                        <span className="text-sm">Temperature</span>
+                      </div>
+                      <p className="text-xl font-semibold">{weather.current_weather.temperature} deg C</p>
+                    </div>
+                    <div className="rounded-2xl bg-white/5 p-4">
+                      <div className="mb-2 flex items-center gap-2 text-sky-200">
+                        <Droplets className="h-4 w-4" />
+                        <span className="text-sm">Humidity</span>
+                      </div>
+                      <p className="text-xl font-semibold">{weather.current_weather.humidity}%</p>
+                    </div>
+                    <div className="rounded-2xl bg-white/5 p-4">
+                      <div className="mb-2 flex items-center gap-2 text-sky-200">
+                        <CloudSun className="h-4 w-4" />
+                        <span className="text-sm">Precipitation</span>
+                      </div>
+                      <p className="text-xl font-semibold">{weather.current_weather.precipitation} mm</p>
+                    </div>
+                    <div className="rounded-2xl bg-white/5 p-4">
+                      <div className="mb-2 flex items-center gap-2 text-sky-200">
+                        <Wind className="h-4 w-4" />
+                        <span className="text-sm">Wind Speed</span>
+                      </div>
+                      <p className="text-xl font-semibold">{weather.current_weather.wind_speed} km/h</p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl bg-white/5 p-4">
-                    <div className="mb-2 flex items-center gap-2 text-sky-200">
-                      <Droplets className="h-4 w-4" />
-                      <span className="text-sm">Humidity</span>
-                    </div>
-                    <p className="text-xl font-semibold">{weather.current_weather.humidity}%</p>
-                  </div>
-                  <div className="rounded-2xl bg-white/5 p-4">
-                    <div className="mb-2 flex items-center gap-2 text-sky-200">
-                      <Wind className="h-4 w-4" />
-                      <span className="text-sm">Wind Speed</span>
-                    </div>
-                    <p className="text-xl font-semibold">{weather.current_weather.wind_speed} km/h</p>
-                  </div>
-                  <div className="rounded-2xl bg-white/5 p-4">
-                    <div className="mb-2 flex items-center gap-2 text-sky-200">
-                      <CloudSun className="h-4 w-4" />
-                      <span className="text-sm">Precipitation</span>
-                    </div>
-                    <p className="text-xl font-semibold">{weather.current_weather.precipitation} mm</p>
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/10 p-5">
+                  <h3 className="mb-4 text-lg font-semibold">3-Day Forecast</h3>
+                  <div className="grid gap-3">
+                    {weather.forecast.map((day) => (
+                      <div key={day.date} className="rounded-2xl bg-white/5 p-4">
+                        <p className="text-sm text-stone-300">{day.date}</p>
+                        <p className="mt-2 text-lg font-semibold">
+                          {day.temperature_max} / {day.temperature_min} deg C
+                        </p>
+                        <p className="mt-1 text-sm text-stone-400">Precipitation: {day.precipitation_sum} mm</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
+            ) : null}
 
-              <div className="rounded-[1.5rem] border border-white/10 bg-black/10 p-5">
-                <h3 className="mb-4 text-lg font-semibold">3-Day Forecast</h3>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {weather.forecast.map((day) => (
-                    <div key={day.date} className="rounded-2xl bg-white/5 p-4">
-                      <p className="text-sm text-stone-300">{day.date}</p>
-                      <p className="mt-3 text-lg font-semibold">{day.temperature_max} / {day.temperature_min} deg C</p>
-                      <p className="mt-2 text-sm text-stone-400">Precipitation: {day.precipitation_sum} mm</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          <p className="mt-4 text-sm text-stone-300">
-            After lookup, temperature, humidity, and precipitation are automatically filled into the simulator inputs below.
-          </p>
+            <p className="mt-4 text-sm text-stone-300">
+              After lookup, temperature, humidity, and precipitation are automatically filled into the simulator inputs below.
+            </p>
+          </section>
         </section>
 
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
           <section className="rounded-[2rem] border border-white/10 bg-white/[0.08] p-6 shadow-glow backdrop-blur-xl">
             <div className="mb-6">
               <h2 className="text-2xl font-semibold">Field Inputs</h2>
-              <p className="mt-2 text-sm text-stone-300">Enter your current field conditions to simulate crop outcomes.</p>
+              <p className="mt-2 text-sm text-stone-300">
+                Weather can auto-fill from the location lookup, while acreage and soil type come from the drawn land polygon.
+              </p>
             </div>
 
             <form className="grid gap-5" onSubmit={handleSubmit}>
@@ -318,21 +483,51 @@ export default function Simulator() {
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-sm font-medium text-stone-100" htmlFor="acres">
+                    Land Area (acres)
+                  </label>
+                  <input
+                    id="acres"
+                    name="acres"
+                    type="number"
+                    step="0.01"
+                    className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none transition focus:border-lime-300 focus:ring-4 focus:ring-lime-200/30"
+                    placeholder="1.25"
+                    value={formData.acres}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2">
+                <div className="space-y-2">
                   <label className="text-sm font-medium text-stone-100" htmlFor="soil_type">
                     Soil Type
                   </label>
-                  <select
+                  <input
                     id="soil_type"
                     name="soil_type"
-                    className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none transition focus:border-lime-300 focus:ring-4 focus:ring-lime-200/30"
+                    type="text"
+                    className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none"
                     value={formData.soil_type}
-                    onChange={handleChange}
-                  >
-                    <option value="Loamy">Loamy</option>
-                    <option value="Sandy">Sandy</option>
-                    <option value="Clay">Clay</option>
-                    <option value="Silt">Silt</option>
-                  </select>
+                    placeholder="Draw land polygon to fetch soil type"
+                    readOnly
+                  />
+                </div>
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/10 p-4">
+                  <p className="text-sm text-stone-400">Soil Profile Snapshot</p>
+                  {soilProfile ? (
+                    <div className="mt-2 space-y-1 text-sm text-stone-200">
+                      <p>Sand: {formatNumber(soilProfile.sand)}%</p>
+                      <p>Clay: {formatNumber(soilProfile.clay)}%</p>
+                      <p>Silt: {formatNumber(soilProfile.silt)}%</p>
+                      <p>pH: {formatNumber(soilProfile.ph)}</p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-stone-300">Waiting for SoilGrids lookup.</p>
+                  )}
                 </div>
               </div>
 
@@ -350,7 +545,7 @@ export default function Simulator() {
             <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-2xl font-semibold">Simulation Results</h2>
-                <p className="mt-2 text-sm text-stone-300">Compare output, profit, and field risk after each run.</p>
+                <p className="mt-2 text-sm text-stone-300">Compare total yield, dynamic pricing, and acreage-aware profitability after each run.</p>
               </div>
               {results?.recommended_crop ? (
                 <div className="rounded-2xl border border-lime-200/30 bg-lime-300/10 px-4 py-3 text-sm">
@@ -360,6 +555,13 @@ export default function Simulator() {
               ) : null}
             </div>
 
+            {results?.pricing ? (
+              <div className="mb-5 rounded-[1.5rem] border border-white/10 bg-black/10 p-4 text-sm text-stone-300">
+                Using prices from <span className="font-medium text-stone-100">{results.pricing.source}</span>.
+                Updated at {results.pricing.updated_at}
+              </div>
+            ) : null}
+
             {!results ? (
               <div className="flex h-full min-h-[420px] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-white/15 bg-black/10 px-6 text-center">
                 <div className="mb-4 rounded-full bg-lime-300/10 p-4 text-lime-200">
@@ -367,7 +569,7 @@ export default function Simulator() {
                 </div>
                 <h3 className="text-xl font-semibold">No simulation yet</h3>
                 <p className="mt-2 max-w-md text-sm text-stone-300">
-                  Fill in the field inputs and run the simulator to see crop predictions, profitability, and the recommended crop.
+                  Draw the land, fetch weather, and run the simulator to compare acreage-scaled crop predictions and profits.
                 </p>
               </div>
             ) : (
@@ -399,10 +601,16 @@ export default function Simulator() {
 
                         <div className="space-y-2 text-sm text-stone-200">
                           <p>
-                            <span className="text-stone-400">Predicted yield:</span> {metrics.predicted_yield}
+                            <span className="text-stone-400">Yield per acre:</span> {metrics.predicted_yield_per_acre}
                           </p>
                           <p>
-                            <span className="text-stone-400">Estimated profit:</span> ${metrics.profit}
+                            <span className="text-stone-400">Total yield:</span> {metrics.total_predicted_yield}
+                          </p>
+                          <p>
+                            <span className="text-stone-400">Price used:</span> ${metrics.unit_price}
+                          </p>
+                          <p>
+                            <span className="text-stone-400">Profit:</span> ${metrics.profit}
                           </p>
                           <p>
                             <span className="text-stone-400">Explanation:</span> {metrics.explanation}
@@ -416,7 +624,7 @@ export default function Simulator() {
                 <div className="rounded-[1.5rem] border border-white/10 bg-black/10 p-4">
                   <div className="mb-4 flex items-center gap-2">
                     <Leaf className="h-5 w-5 text-lime-200" />
-                    <h3 className="text-lg font-semibold">Predicted Yield Comparison</h3>
+                    <h3 className="text-lg font-semibold">Total Yield Comparison</h3>
                   </div>
 
                   <div className="h-72 w-full">
@@ -433,7 +641,7 @@ export default function Simulator() {
                             color: "#fafaf9",
                           }}
                         />
-                        <Bar dataKey="yield" radius={[12, 12, 0, 0]}>
+                        <Bar dataKey="totalYield" radius={[12, 12, 0, 0]}>
                           {chartData.map((entry) => (
                             <Cell key={entry.crop} fill={cropColors[entry.crop]} />
                           ))}
