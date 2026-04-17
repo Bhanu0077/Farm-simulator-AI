@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Droplets, Leaf, LogOut, Sprout, SunMedium, Trees } from "lucide-react";
+import { CloudSun, Droplets, Leaf, LogOut, MapPin, Search, Sprout, SunMedium, Trees, Wind } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
@@ -43,6 +43,9 @@ export default function Simulator() {
   const [formData, setFormData] = useState(initialFormState);
   const [results, setResults] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [weatherLocation, setWeatherLocation] = useState("");
+  const [weather, setWeather] = useState(null);
+  const [isFetchingWeather, setIsFetchingWeather] = useState(false);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -73,6 +76,29 @@ export default function Simulator() {
       toast.error(error.response?.data?.error || "Unable to run simulation");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleWeatherLookup = async (event) => {
+    event.preventDefault();
+
+    if (!weatherLocation.trim()) {
+      toast.error("Enter a location first");
+      return;
+    }
+
+    setIsFetchingWeather(true);
+
+    try {
+      const response = await api.get("/weather", {
+        params: { location: weatherLocation.trim() },
+      });
+      setWeather(response.data);
+      toast.success("Weather fetched");
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Unable to fetch weather");
+    } finally {
+      setIsFetchingWeather(false);
     }
   };
 
@@ -116,6 +142,95 @@ export default function Simulator() {
           <MetricCard icon={Droplets} label="Rainfall Range" value="90-220 mm" helper="Balanced water planning improves yield confidence." />
           <MetricCard icon={SunMedium} label="Temperature Range" value="18-30 deg C" helper="Crop stress increases beyond the preferred window." />
           <MetricCard icon={Trees} label="Supported Soils" value="Loamy / Sandy / Clay / Silt" helper="Soil profile changes yield and risk scoring." />
+        </section>
+
+        <section className="mb-6 rounded-[2rem] border border-white/10 bg-white/[0.08] p-6 shadow-glow backdrop-blur-xl">
+          <div className="mb-5 flex items-center gap-3">
+            <CloudSun className="h-6 w-6 text-sky-200" />
+            <div>
+              <h2 className="text-2xl font-semibold">Live Weather Lookup</h2>
+              <p className="text-sm text-stone-300">Check current weather using the free Open-Meteo API before you simulate.</p>
+            </div>
+          </div>
+
+          <form className="grid gap-4 lg:grid-cols-[1fr_auto]" onSubmit={handleWeatherLookup}>
+            <input
+              type="text"
+              value={weatherLocation}
+              onChange={(event) => setWeatherLocation(event.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none transition focus:border-lime-300 focus:ring-4 focus:ring-lime-200/30"
+              placeholder="Enter city or village, e.g. Hyderabad"
+            />
+            <button
+              type="submit"
+              disabled={isFetchingWeather}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-3 font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <Search className="h-4 w-4" />
+              {isFetchingWeather ? <LoadingSpinner size="sm" label="Checking..." /> : "Check Weather"}
+            </button>
+          </form>
+
+          {weather ? (
+            <div className="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+              <div className="rounded-[1.5rem] border border-white/10 bg-black/10 p-5">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 text-lime-200">
+                      <MapPin className="h-4 w-4" />
+                      <span className="text-sm font-medium">
+                        {weather.location.name}
+                        {weather.location.country ? `, ${weather.location.country}` : ""}
+                      </span>
+                    </div>
+                    <h3 className="mt-2 text-2xl font-semibold">{weather.current_weather.summary}</h3>
+                    <p className="mt-1 text-sm text-stone-300">Observed at {weather.current_weather.observed_at}</p>
+                  </div>
+                  <div className="rounded-2xl bg-sky-300/10 px-4 py-3 text-right">
+                    <p className="text-xs uppercase tracking-wide text-stone-400">Temperature</p>
+                    <p className="text-3xl font-semibold text-white">{weather.current_weather.temperature} deg C</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-white/5 p-4">
+                    <div className="mb-2 flex items-center gap-2 text-sky-200">
+                      <Droplets className="h-4 w-4" />
+                      <span className="text-sm">Humidity</span>
+                    </div>
+                    <p className="text-xl font-semibold">{weather.current_weather.humidity}%</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/5 p-4">
+                    <div className="mb-2 flex items-center gap-2 text-sky-200">
+                      <Wind className="h-4 w-4" />
+                      <span className="text-sm">Wind Speed</span>
+                    </div>
+                    <p className="text-xl font-semibold">{weather.current_weather.wind_speed} km/h</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/5 p-4">
+                    <div className="mb-2 flex items-center gap-2 text-sky-200">
+                      <CloudSun className="h-4 w-4" />
+                      <span className="text-sm">Precipitation</span>
+                    </div>
+                    <p className="text-xl font-semibold">{weather.current_weather.precipitation} mm</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-white/10 bg-black/10 p-5">
+                <h3 className="mb-4 text-lg font-semibold">3-Day Forecast</h3>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {weather.forecast.map((day) => (
+                    <div key={day.date} className="rounded-2xl bg-white/5 p-4">
+                      <p className="text-sm text-stone-300">{day.date}</p>
+                      <p className="mt-3 text-lg font-semibold">{day.temperature_max} / {day.temperature_min} deg C</p>
+                      <p className="mt-2 text-sm text-stone-400">Precipitation: {day.precipitation_sum} mm</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">

@@ -1,206 +1,149 @@
-# 🌾 Smart Farm Simulator
+# Smart Farm Simulator
 
-### AI-Powered Crop Decision Support System
+Smart Farm Simulator now includes:
+- password login
+- email OTP login
+- forgot/reset password
+- protected crop simulation
+- protected live weather lookup using Open-Meteo
 
-Smart Farm Simulator is a web-based application that helps farmers and users make **data-driven crop decisions** based on environmental conditions. By simulating outcomes for different crops, it provides actionable insights on **yield, profit, and risk**.
+## Project Structure
 
----
-
-## 🚀 Features
-
-* 📥 User-friendly input system (rainfall, temperature, humidity, soil type)
-* 🤖 AI-based simulation for multiple crops (Rice, Wheat, Corn)
-* 📊 Predicted:
-
-  * Yield
-  * Profit (₹)
-  * Risk Level (Low / Medium / High)
-* 🏆 Best crop recommendation based on profitability
-* 📉 Visual comparison using charts
-* ⚡ Fast and responsive UI
-
----
-
-## 🧠 How It Works
-
-1. User inputs environmental data:
-
-   * Rainfall (mm)
-   * Temperature (°C)
-   * Humidity (%)
-   * Soil Type
-
-2. Frontend sends data to backend via API:
-
-   ```json
-   {
-     "rainfall": 1200,
-     "temperature": 28,
-     "humidity": 75,
-     "soil_type": "Loamy"
-   }
-   ```
-
-3. Backend processes the data and returns predictions for:
-
-   * Rice 🌾
-   * Wheat 🌿
-   * Corn 🌽
-
-4. Results are displayed with:
-
-   * Yield predictions
-   * Profit estimation
-   * Risk analysis
-   * Best crop highlight
-
----
-
-## 🛠️ Tech Stack
-
-### Frontend
-
-* React (Vite)
-* Tailwind CSS
-* Axios
-* Recharts
-
-### Backend
-
-* Flask (Python)
-* REST API
-
----
-
-## 📁 Project Structure
-
-```
-smart-farm-simulator/
-│
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   └── package.json
-│
-├── backend/
-│   ├── app.py
-│   └── requirements.txt
-│
-└── README.md
+```text
+Farm-simulator-AI/
+|-- backend/
+|   |-- app.py
+|   |-- config.py
+|   |-- models.py
+|   |-- requirements.txt
+|   |-- routes/
+|   |   |-- auth.py
+|   |   |-- simulator.py
+|   |   `-- weather.py
+|   `-- services/
+|       `-- email_service.py
+|-- frontend/
+|   |-- package.json
+|   `-- src/
+|       |-- components/
+|       |-- context/
+|       |-- pages/
+|       `-- services/
+`-- README.md
 ```
 
----
+## Backend Setup
 
-## ⚙️ Installation & Setup
-
-### 1. Clone Repository
-
-```bash
-git clone https://github.com/your-username/smart-farm-simulator.git
-cd smart-farm-simulator
-```
-
----
-
-### 2. Setup Backend
-
-```bash
+```powershell
 cd backend
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
-python app.py
 ```
 
-Backend runs on:
-👉 http://localhost:5000
+Run the backend:
 
----
+```powershell
+$env:FLASK_APP="app.py"
+python -m flask run --port=5000
+```
 
-### 3. Setup Frontend
+Backend URL:
 
-```bash
+```text
+http://localhost:5000
+```
+
+## Frontend Setup
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-Frontend runs on:
-👉 http://localhost:5173
+Frontend URL:
 
----
+```text
+http://localhost:5173
+```
 
-## 📡 API Endpoint
+## Email OTP Config
 
-### POST /predict
+For local testing without real email sending:
 
-**Request Body:**
+```powershell
+$env:EMAIL_PROVIDER="console"
+```
+
+For Resend:
+
+```powershell
+$env:EMAIL_PROVIDER="resend"
+$env:EMAIL_FROM="Smart Farm <your-verified-sender@yourdomain.com>"
+$env:RESEND_API_KEY="YOUR_RESEND_API_KEY"
+```
+
+Optional OTP settings:
+
+```powershell
+$env:OTP_EXPIRY_MINUTES="10"
+$env:OTP_LENGTH="6"
+$env:OTP_RESEND_COOLDOWN_SECONDS="60"
+```
+
+When `EMAIL_PROVIDER=console`, the backend prints the OTP in the terminal and also returns `otp_debug` from `POST /auth/request-otp` for easy testing.
+
+## Backend Endpoints
+
+Auth:
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/request-otp`
+- `POST /auth/verify-otp`
+- `POST /auth/forgot-password`
+- `POST /auth/reset-password`
+
+Simulator:
+- `POST /predict`
+
+Weather:
+- `GET /weather?location=Hyderabad`
+- `GET /weather?lat=17.385&lon=78.486`
+
+## Example OTP Flow
+
+Request OTP:
 
 ```json
+POST /auth/request-otp
 {
-  "rainfall": number,
-  "temperature": number,
-  "humidity": number,
-  "soil_type": "Loamy | Sandy | Clay | Silt"
+  "email": "bhanu@example.com"
 }
 ```
 
-**Response Example:**
+Verify OTP:
 
 ```json
+POST /auth/verify-otp
 {
-  "crops": [
-    {
-      "name": "Rice",
-      "yield": 4.5,
-      "profit": 50000,
-      "risk": "Low",
-      "explanation": "High rainfall favors rice growth."
-    }
-  ]
+  "email": "bhanu@example.com",
+  "otp": "123456"
 }
 ```
 
----
+## Weather Notes
 
-## 🌍 Future Enhancements
+The weather endpoint uses Open-Meteo geocoding and forecast APIs. It returns:
+- resolved location
+- current temperature
+- humidity
+- precipitation
+- wind speed
+- weather summary
+- 3-day forecast
 
-* 🌦️ Weather API integration (auto-fill inputs)
-* 📡 IoT sensor integration for real-time soil data
-* 📱 Mobile app version
-* 🧠 Advanced ML models for higher accuracy
-* 🌎 Location-based recommendations
+## Verification
 
----
-
-## 🎯 Use Cases
-
-* Farmers planning crop cycles
-* Agricultural students and researchers
-* Agri-tech platforms
-* Government advisory systems
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to fork this repo and submit a pull request.
-
----
-
-## 📄 License
-
-This project is open-source and available under the MIT License.
-
----
-
-## 👨‍💻 Authors
-
-* Bhanu Prakash, Abhinay
-* Oblyx
-
----
-
-## ⭐ Acknowledgment
-
-Built as part of a hackathon to solve real-world agricultural challenges using technology and AI.
+- Backend Python files compiled successfully with `python -m compileall`
+- Frontend compiled successfully with `npm run build`

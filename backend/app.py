@@ -3,11 +3,13 @@ import os
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from sqlalchemy import inspect, text
 
 from config import Config, INSTANCE_DIR
 from models import db
 from routes.auth import auth_bp
 from routes.simulator import simulator_bp
+from routes.weather import weather_bp
 
 
 jwt = JWTManager()
@@ -29,6 +31,7 @@ def create_app():
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(simulator_bp)
+    app.register_blueprint(weather_bp)
 
     @app.get("/")
     def health_check():
@@ -48,8 +51,19 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _ensure_schema_updates()
 
     return app
+
+
+def _ensure_schema_updates():
+    inspector = inspect(db.engine)
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    if "is_verified" not in user_columns:
+        with db.engine.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT 0")
+            )
 
 
 app = create_app()

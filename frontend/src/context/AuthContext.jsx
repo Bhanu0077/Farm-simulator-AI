@@ -33,18 +33,23 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (payload) => {
-    await api.post("/auth/register", payload);
-    const response = await api.post("/auth/login", {
-      email: payload.email,
-      password: payload.password,
-    });
-
-    persistAuth(response.data.access_token, response.data.user);
+    const response = await api.post("/auth/register", payload);
     return response.data;
   };
 
   const login = async (payload) => {
     const response = await api.post("/auth/login", payload);
+    persistAuth(response.data.access_token, response.data.user);
+    return response.data;
+  };
+
+  const requestOtp = async (payload) => {
+    const response = await api.post("/auth/request-otp", payload);
+    return response.data;
+  };
+
+  const verifyOtp = async (payload) => {
+    const response = await api.post("/auth/verify-otp", payload);
     persistAuth(response.data.access_token, response.data.user);
     return response.data;
   };
@@ -60,6 +65,8 @@ export function AuthProvider({ children }) {
     isAuthReady,
     register,
     login,
+    requestOtp,
+    verifyOtp,
     logout,
     clearAuth,
   };

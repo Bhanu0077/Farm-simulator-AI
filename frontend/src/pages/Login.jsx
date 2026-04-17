@@ -6,7 +6,7 @@ export default function LoginPage() {
   return (
     <AuthShell
       title="Login"
-      subtitle="Access your farm dashboard and continue your latest simulation."
+      subtitle="Access your farm dashboard after verifying your email OTP."
       footerText="Need an account?"
       footerLinkText="Create one"
       footerLinkTo="/register"

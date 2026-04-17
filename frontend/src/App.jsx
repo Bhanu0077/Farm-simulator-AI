@@ -7,6 +7,7 @@ import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import ResetPasswordPage from "./pages/ResetPassword";
 import SimulatorPage from "./pages/Simulator";
+import VerifyOtpPage from "./pages/VerifyOtp";
 
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/verify-otp" element={<VerifyOtpPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route

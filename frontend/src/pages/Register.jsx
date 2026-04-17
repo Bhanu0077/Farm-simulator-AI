@@ -6,7 +6,7 @@ export default function RegisterPage() {
   return (
     <AuthShell
       title="Create Account"
-      subtitle="Sign up to save your session and unlock the simulator."
+      subtitle="Sign up first, then verify the OTP from your email to unlock the simulator."
       footerText="Already registered?"
       footerLinkText="Login"
       footerLinkTo="/login"
