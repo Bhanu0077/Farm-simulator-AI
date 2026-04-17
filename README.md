@@ -1,114 +1,206 @@
-# Smart Farm Simulator
+# 🌾 Smart Farm Simulator
 
-## Project Structure
+### AI-Powered Crop Decision Support System
 
-```text
-Farm-simulator-AI/
-|-- README.md
-|-- backend/
-|   |-- app.py
-|   |-- config.py
-|   |-- models.py
-|   |-- requirements.txt
-|   |-- instance/
-|   |   `-- app.db
-|   `-- routes/
-|       |-- __init__.py
-|       |-- auth.py
-|       `-- simulator.py
-`-- frontend/
-    |-- index.html
-    |-- package.json
-    |-- postcss.config.js
-    |-- tailwind.config.js
-    |-- vite.config.js
-    `-- src/
-        |-- App.jsx
-        |-- index.css
-        |-- main.jsx
-        |-- components/
-        |-- context/
-        |-- pages/
-        `-- services/
+Smart Farm Simulator is a web-based application that helps farmers and users make **data-driven crop decisions** based on environmental conditions. By simulating outcomes for different crops, it provides actionable insights on **yield, profit, and risk**.
+
+---
+
+## 🚀 Features
+
+* 📥 User-friendly input system (rainfall, temperature, humidity, soil type)
+* 🤖 AI-based simulation for multiple crops (Rice, Wheat, Corn)
+* 📊 Predicted:
+
+  * Yield
+  * Profit (₹)
+  * Risk Level (Low / Medium / High)
+* 🏆 Best crop recommendation based on profitability
+* 📉 Visual comparison using charts
+* ⚡ Fast and responsive UI
+
+---
+
+## 🧠 How It Works
+
+1. User inputs environmental data:
+
+   * Rainfall (mm)
+   * Temperature (°C)
+   * Humidity (%)
+   * Soil Type
+
+2. Frontend sends data to backend via API:
+
+   ```json
+   {
+     "rainfall": 1200,
+     "temperature": 28,
+     "humidity": 75,
+     "soil_type": "Loamy"
+   }
+   ```
+
+3. Backend processes the data and returns predictions for:
+
+   * Rice 🌾
+   * Wheat 🌿
+   * Corn 🌽
+
+4. Results are displayed with:
+
+   * Yield predictions
+   * Profit estimation
+   * Risk analysis
+   * Best crop highlight
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+
+* React (Vite)
+* Tailwind CSS
+* Axios
+* Recharts
+
+### Backend
+
+* Flask (Python)
+* REST API
+
+---
+
+## 📁 Project Structure
+
+```
+smart-farm-simulator/
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   └── package.json
+│
+├── backend/
+│   ├── app.py
+│   └── requirements.txt
+│
+└── README.md
 ```
 
-## Backend Setup
+---
 
-From the project root:
+## ⚙️ Installation & Setup
 
-```powershell
+### 1. Clone Repository
+
+```bash
+git clone https://github.com/your-username/smart-farm-simulator.git
+cd smart-farm-simulator
+```
+
+---
+
+### 2. Setup Backend
+
+```bash
 cd backend
-python -m venv .venv
-.venv\Scripts\activate
 pip install -r requirements.txt
+python app.py
 ```
 
-Run the Flask API:
+Backend runs on:
+👉 http://localhost:5000
 
-```powershell
-$env:FLASK_APP="app.py"
-python -m flask run --port=5000
-```
+---
 
-Backend base URL:
+### 3. Setup Frontend
 
-```text
-http://localhost:5000
-```
-
-## Frontend Setup
-
-Open a new terminal from the project root:
-
-```powershell
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Frontend dev server:
+Frontend runs on:
+👉 http://localhost:5173
 
-```text
-http://localhost:5173
+---
+
+## 📡 API Endpoint
+
+### POST /predict
+
+**Request Body:**
+
+```json
+{
+  "rainfall": number,
+  "temperature": number,
+  "humidity": number,
+  "soil_type": "Loamy | Sandy | Clay | Silt"
+}
 ```
 
-The frontend is already configured to call the backend at `http://localhost:5000`, and the Flask backend already allows CORS from `http://localhost:5173`.
+**Response Example:**
 
-## Frontend Features
+```json
+{
+  "crops": [
+    {
+      "name": "Rice",
+      "yield": 4.5,
+      "profit": 50000,
+      "risk": "Low",
+      "explanation": "High rainfall favors rice growth."
+    }
+  ]
+}
+```
 
-- React 18 + Vite
-- Tailwind CSS
-- React Router protected routes
-- Axios instance with JWT interceptor
-- Auth state with React Context API
-- Login, register, forgot password, and reset password pages
-- Protected simulator page with yield cards, best crop highlight, and Recharts bar chart
-- Toast notifications via `sonner`
+---
 
-## Auth Flow
+## 🌍 Future Enhancements
 
-1. Register at `/register`
-2. The frontend auto-logs in after successful registration
-3. Login stores `user` and `token` in `localStorage`
-4. Protected routes redirect unauthenticated users to `/login`
-5. Forgot password posts to `/auth/forgot-password`
-6. Reset password reads the `token` from `/reset-password?token=XYZ`
-7. Logout clears local auth state and redirects to `/login`
+* 🌦️ Weather API integration (auto-fill inputs)
+* 📡 IoT sensor integration for real-time soil data
+* 📱 Mobile app version
+* 🧠 Advanced ML models for higher accuracy
+* 🌎 Location-based recommendations
 
-## Backend Endpoints Used By Frontend
+---
 
-- `POST /auth/register`
-- `POST /auth/login`
-- `POST /auth/forgot-password`
-- `POST /auth/reset-password`
-- `POST /predict`
+## 🎯 Use Cases
 
-## Quick Test
+* Farmers planning crop cycles
+* Agricultural students and researchers
+* Agri-tech platforms
+* Government advisory systems
 
-1. Start the backend on port `5000`
-2. Start the frontend on port `5173`
-3. Open [http://localhost:5173](http://localhost:5173)
-4. Register a new account
-5. You should be redirected to `/simulator`
-6. Run a simulation with rainfall, temperature, humidity, and soil type
-7. Use forgot password to generate a reset token, then open the reset link shown in the backend console
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to fork this repo and submit a pull request.
+
+---
+
+## 📄 License
+
+This project is open-source and available under the MIT License.
+
+---
+
+## 👨‍💻 Authors
+
+* Your Name
+* Team Name (if any)
+
+---
+
+## ⭐ Acknowledgment
+
+Built as part of a hackathon to solve real-world agricultural challenges using technology and AI.
