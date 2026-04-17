@@ -196,8 +196,8 @@ This project is open-source and available under the MIT License.
 
 ## 👨‍💻 Authors
 
-* Your Name
-* Team Name (if any)
+* Bhanu Prakash, Abhinay
+* Oblyx
 
 ---
 
