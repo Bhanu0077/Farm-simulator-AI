@@ -1,19 +1,46 @@
 # Smart Farm Simulator
 
-Smart Farm Simulator is a protected React + Flask application for farm planning. It supports land selection, live weather lookup, SoilGrids soil data, crop yield/profit simulation, risk analysis, and an AI chatbot that answers using the user's current farm data.
+Smart Farm Simulator is a full-stack farm planning application built with React and Flask. It helps users select land, fetch weather and soil data, simulate crop yield and profit, analyze farming risk, and ask farm-specific questions through an AI chatbot.
 
 ## Features
 
-- Password login, email OTP login, and forgot/reset password
-- JWT-protected dashboard and simulator pages
-- Interactive land polygon selection with acreage calculation
+- User registration and password login
+- Email OTP login
+- Forgot password and reset password flow
+- JWT-protected simulator dashboard
+- Interactive land polygon selection
+- Automatic acreage calculation
 - Live weather lookup using Open-Meteo
 - Soil profile lookup using SoilGrids
 - Crop yield, risk, and profit simulation
-- Best-crop selection from backend simulation results
-- Risk analysis with OpenRouter AI and local fallback logic
-- Chatbot using OpenRouter through the Flask backend
-- Chatbot memory using recent conversation history and current farm context
+- Backend best-crop recommendation based on estimated profit
+- AI-powered risk analysis with fallback logic
+- AI chatbot with conversation memory and current farm context
+
+## Tech Stack
+
+### Frontend
+
+- React
+- Vite
+- Tailwind CSS
+- Axios
+- React Router
+- Leaflet
+- Turf.js
+- Recharts
+- Lucide React
+
+### Backend
+
+- Flask
+- Flask-CORS
+- Flask-JWT-Extended
+- Flask-SQLAlchemy
+- SQLite
+- Requests
+- Werkzeug
+- OpenRouter API
 
 ## Project Structure
 
@@ -37,6 +64,7 @@ Farm-simulator-AI/
 |       `-- soil_service.py
 |-- frontend/
 |   |-- package.json
+|   |-- package-lock.json
 |   `-- src/
 |       |-- components/
 |       |-- context/
@@ -56,7 +84,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Run the backend:
+Start the backend server:
 
 ```powershell
 $env:FLASK_APP="app.py"
@@ -83,27 +111,32 @@ Frontend URL:
 http://localhost:5173
 ```
 
-## Environment Variables
+## Environment Configuration
 
-### Required For AI Chatbot And AI Risk Analysis
+Set environment variables in the same terminal session before starting the backend.
 
-Set the OpenRouter key on the backend, not the frontend:
+### Required For AI Features
 
 ```powershell
 $env:OPENROUTER_API_KEY="YOUR_OPENROUTER_API_KEY"
 ```
 
-Restart Flask after setting this value. The chatbot calls `POST /chatbot`, and the Flask backend securely calls OpenRouter using this key.
+The OpenRouter key is used by the Flask backend for:
 
-### Email OTP Config
+- AI chatbot responses
+- AI risk analysis
 
-For local testing without real email sending:
+Do not place the OpenRouter key in the frontend. The frontend calls the Flask backend, and the backend calls OpenRouter.
+
+### Local Email OTP Testing
 
 ```powershell
 $env:EMAIL_PROVIDER="console"
 ```
 
-For Resend:
+When `EMAIL_PROVIDER=console`, OTP codes are printed in the backend terminal and returned as `otp_debug` from `POST /auth/request-otp`.
+
+### Resend Email Provider
 
 ```powershell
 $env:EMAIL_PROVIDER="resend"
@@ -111,7 +144,7 @@ $env:EMAIL_FROM="Smart Farm <your-verified-sender@yourdomain.com>"
 $env:RESEND_API_KEY="YOUR_RESEND_API_KEY"
 ```
 
-Optional OTP settings:
+### Optional OTP Settings
 
 ```powershell
 $env:OTP_EXPIRY_MINUTES="10"
@@ -119,93 +152,105 @@ $env:OTP_LENGTH="6"
 $env:OTP_RESEND_COOLDOWN_SECONDS="60"
 ```
 
-When `EMAIL_PROVIDER=console`, the backend prints the OTP in the terminal and also returns `otp_debug` from `POST /auth/request-otp` for easy testing.
+## API Endpoints
 
-## Backend Endpoints
+Most application endpoints require a JWT access token.
 
-Most app endpoints are JWT-protected. After login or OTP verification, the frontend sends the token in the `Authorization: Bearer <token>` header.
+### Authentication
 
-Auth:
+```text
+POST /auth/register
+POST /auth/login
+POST /auth/request-otp
+POST /auth/verify-otp
+POST /auth/forgot-password
+POST /auth/reset-password
+```
 
-- `POST /auth/register`
-- `POST /auth/login`
-- `POST /auth/request-otp`
-- `POST /auth/verify-otp`
-- `POST /auth/forgot-password`
-- `POST /auth/reset-password`
+### Simulator
 
-Simulator:
+```text
+POST /predict
+```
 
-- `POST /predict`
+### Weather
 
-Weather:
+```text
+GET /weather?location=Hyderabad
+GET /weather?lat=17.385&lon=78.486
+```
 
-- `GET /weather?location=Hyderabad`
-- `GET /weather?lat=17.385&lon=78.486`
+### Soil Data
 
-Land And Soil:
+```text
+GET /soil-data?lat=17.385&lon=78.486
+```
 
-- `GET /soil-data?lat=17.385&lon=78.486`
+### Risk Analysis
 
-Risk Analysis:
+```text
+POST /risk-analysis
+```
 
-- `POST /risk-analysis`
+### Chatbot
 
-Chatbot:
+```text
+POST /chatbot
+```
 
-- `POST /chatbot`
+## Authentication Flow
 
-## Simulator Logic
+After login or OTP verification, the backend returns a JWT access token. The frontend stores the token and sends it with protected API requests:
 
-The simulator uses rule-based crop profiles, not a trained ML model. Each crop has base yield, ideal rainfall, ideal temperature, ideal humidity, tolerance values, preferred soils, and a short explanation.
+```text
+Authorization: Bearer <access_token>
+```
 
-For each crop, the backend calculates:
-
-- weather penalties from rainfall, temperature, and humidity deviation
-- soil suitability bonus or penalty
-- predicted yield per acre
-- total predicted yield using land size
-- profit using seasonal fallback crop prices
-- risk level: `Low`, `Medium`, or `High`
-
-The backend's best crop is the crop with the highest estimated profit from the simulation.
-
-## Chatbot Logic
-
-The chatbot keeps recent conversation memory in the frontend and sends the last messages to the backend. The backend adds a system prompt containing:
-
-- user name
-- soil sand, clay, silt, pH, organic carbon, and soil type
-- weather temperature, rainfall, and humidity
-- land size
-- recommended crop
-
-The backend then calls OpenRouter with `openai/gpt-4o-mini` and returns a concise farming response. If `OPENROUTER_API_KEY` is missing, `/chatbot` returns an error and the frontend shows a fallback message.
-
-## Example OTP Flow
-
-Request OTP:
+Example OTP request:
 
 ```json
-POST /auth/request-otp
 {
   "email": "bhanu@example.com"
 }
 ```
 
-Verify OTP:
+Example OTP verification:
 
 ```json
-POST /auth/verify-otp
 {
   "email": "bhanu@example.com",
   "otp": "123456"
 }
 ```
 
-## Weather Notes
+## Simulator Logic
 
-The weather endpoint uses Open-Meteo geocoding and forecast APIs. It returns:
+The crop simulator is rule-based. It does not use a trained machine learning model.
+
+Each crop profile includes:
+
+- base yield
+- ideal rainfall
+- ideal temperature
+- ideal humidity
+- tolerance ranges
+- preferred soil types
+- crop summary
+
+For each crop, the backend calculates:
+
+- weather penalty
+- soil suitability adjustment
+- predicted yield per acre
+- total predicted yield
+- estimated profit
+- risk level
+
+The backend selects the best crop by comparing estimated profit across available crop predictions.
+
+## Weather Data
+
+Weather data is fetched from Open-Meteo. The response includes:
 
 - resolved location
 - current temperature
@@ -215,9 +260,9 @@ The weather endpoint uses Open-Meteo geocoding and forecast APIs. It returns:
 - weather summary
 - 3-day forecast
 
-## Soil Notes
+## Soil Data
 
-The soil endpoint uses SoilGrids data for the selected land center point. It returns:
+Soil data is fetched from SoilGrids using the selected land center point. The response includes:
 
 - sand percentage
 - clay percentage
@@ -226,14 +271,62 @@ The soil endpoint uses SoilGrids data for the selected land center point. It ret
 - organic carbon
 - classified soil type
 
+## Risk Analysis
+
+The risk analysis endpoint first attempts to use OpenRouter. If the AI request fails, the backend uses local fallback rules based on:
+
+- rainfall
+- temperature
+- humidity
+- soil pH
+- organic carbon
+- sand and clay percentage
+- land size
+
+The response includes:
+
+- overall risk
+- water risk
+- soil risk
+- weather risk
+- recommendations
+
+## Chatbot
+
+The chatbot uses the current farm context and recent conversation history. The frontend sends recent chat messages and farm data to the Flask backend. The backend builds a system prompt and calls OpenRouter.
+
+The chatbot context includes:
+
+- user name
+- recommended crop
+- soil values
+- weather values
+- land size
+- recent conversation messages
+
+If the OpenRouter key is missing or the request fails, the frontend displays a fallback response.
+
 ## Verification
 
-Run these checks after changes:
+Run backend syntax checks:
 
 ```powershell
 python -m compileall backend
+```
+
+Run frontend production build:
+
+```powershell
 cd frontend
 npm run build
 ```
 
-Known build note: Vite may warn that some chunks are larger than 500 kB. The build can still complete successfully.
+The frontend build may show a Vite chunk-size warning. This warning does not necessarily indicate a failed build.
+
+## Notes
+
+- Start the backend before using the frontend.
+- Restart the backend after changing environment variables.
+- AI features require a valid `OPENROUTER_API_KEY`.
+- Protected endpoints require a valid JWT token.
+- The simulator is designed for planning support and should not replace professional agronomic advice.
