@@ -7,6 +7,7 @@ import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import ResetPasswordPage from "./pages/ResetPassword";
 import SimulatorPage from "./pages/Simulator";
+import SimulatorResultsPage from "./pages/SimulatorResults";
 import VerifyOtpPage from "./pages/VerifyOtp";
 
 
@@ -25,6 +26,14 @@ function App() {
           element={
             <ProtectedRoute>
               <SimulatorPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/simulator/results"
+          element={
+            <ProtectedRoute>
+              <SimulatorResultsPage />
             </ProtectedRoute>
           }
         />

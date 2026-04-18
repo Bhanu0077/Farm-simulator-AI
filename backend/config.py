@@ -27,3 +27,4 @@ class Config:
     SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
     SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")

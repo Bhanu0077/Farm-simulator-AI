@@ -1,26 +1,27 @@
-import { useState } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useRef, useState } from "react";
 import {
   CloudSun,
   Droplets,
   FlaskConical,
-  Leaf,
   LogOut,
   MapPinned,
   Mountain,
   Search,
-  Sprout,
   SunMedium,
   Trees,
   Wind,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import CropMultiSelect from "./CropMultiSelect";
+import { FARMS } from "../data/farms";
 import LandSelectionMap from "./LandSelectionMap";
 import LoadingSpinner from "./LoadingSpinner";
+
+const MAX_SELECTED_CROPS = 30;
 
 
 const initialFormState = {
@@ -29,12 +30,11 @@ const initialFormState = {
   humidity: "",
   acres: "",
   soil_type: "",
-};
-
-const cropColors = {
-  Rice: "#84cc16",
-  Wheat: "#f59e0b",
-  Corn: "#22c55e",
+  sand: "",
+  clay: "",
+  silt: "",
+  ph: "",
+  organic_carbon: "",
 };
 
 
@@ -61,34 +61,158 @@ function formatNumber(value, digits = 2) {
 }
 
 
+function formatSoilField(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "";
+  }
+
+  return String(value);
+}
+
+
 export default function Simulator() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [formData, setFormData] = useState(initialFormState);
-  const [results, setResults] = useState(null);
+  const restoredState = location.state?.simulatorState;
+  const [formData, setFormData] = useState(() => restoredState?.formData || initialFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [weatherLocation, setWeatherLocation] = useState("");
-  const [weather, setWeather] = useState(null);
+  const [weatherLocation, setWeatherLocation] = useState(() => restoredState?.weatherLocation || "");
+  const [weather, setWeather] = useState(() => restoredState?.weather || null);
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
-  const [landSelection, setLandSelection] = useState(null);
-  const [soilProfile, setSoilProfile] = useState(null);
+  const [landSelection, setLandSelection] = useState(() => restoredState?.landSelection || null);
+  const [soilProfile, setSoilProfile] = useState(() => restoredState?.soilProfile || null);
   const [isFetchingSoil, setIsFetchingSoil] = useState(false);
+  const [mapFocus, setMapFocus] = useState(() => restoredState?.mapFocus || null);
+  const [selectedCrops, setSelectedCrops] = useState(() => restoredState?.selectedCrops || []);
+  const [cropSelectionError, setCropSelectionError] = useState("");
+  const [selectedFarmId, setSelectedFarmId] = useState(() => restoredState?.selectedFarmId || "");
+  const soilRequestIdRef = useRef(0);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
     setFormData((current) => ({ ...current, [name]: value }));
   };
 
+  const handleSelectedCropsChange = (nextSelectedCrops) => {
+    if (nextSelectedCrops.length > MAX_SELECTED_CROPS) {
+      setCropSelectionError(`Please select no more than ${MAX_SELECTED_CROPS} crops.`);
+      toast.error(`Please select no more than ${MAX_SELECTED_CROPS} crops.`);
+      return;
+    }
+
+    setSelectedCrops(nextSelectedCrops);
+    setCropSelectionError("");
+  };
+
+  const applyWeatherData = (weatherData, fallbackLocation) => {
+    setWeather(weatherData);
+    setWeatherLocation(weatherData.location?.name || fallbackLocation);
+
+    if (
+      weatherData.location?.latitude !== null &&
+      weatherData.location?.latitude !== undefined &&
+      weatherData.location?.longitude !== null &&
+      weatherData.location?.longitude !== undefined
+    ) {
+      setMapFocus({
+        lat: weatherData.location.latitude,
+        lon: weatherData.location.longitude,
+        zoom: 13,
+      });
+    }
+
+    setFormData((current) => ({
+      ...current,
+      rainfall:
+        weatherData.current_weather?.precipitation !== null &&
+        weatherData.current_weather?.precipitation !== undefined
+          ? String(weatherData.current_weather.precipitation)
+          : current.rainfall,
+      temperature:
+        weatherData.current_weather?.temperature !== null &&
+        weatherData.current_weather?.temperature !== undefined
+          ? String(weatherData.current_weather.temperature)
+          : current.temperature,
+      humidity:
+        weatherData.current_weather?.humidity !== null &&
+        weatherData.current_weather?.humidity !== undefined
+          ? String(weatherData.current_weather.humidity)
+          : current.humidity,
+    }));
+  };
+
+  const handleFarmSelect = async (event) => {
+    const nextFarmId = event.target.value;
+    setSelectedFarmId(nextFarmId);
+
+    if (!nextFarmId) {
+      return;
+    }
+
+    const farm = FARMS.find((item) => item.id === nextFarmId);
+    if (!farm) {
+      return;
+    }
+
+    const nextLandSelection = {
+      polygon: null,
+      center: farm.center,
+      areaSquareMeters: farm.areaSquareMeters,
+      areaAcres: farm.areaAcres,
+    };
+
+    setLandSelection(nextLandSelection);
+    setSoilProfile(farm.soilProfile);
+    setMapFocus({
+      lat: farm.center.lat,
+      lon: farm.center.lon,
+      zoom: 13,
+    });
+    setWeatherLocation(farm.locationName);
+    setFormData((current) => ({
+      ...current,
+      acres: String(farm.areaAcres),
+      soil_type: farm.soilProfile.soil_type,
+      sand: formatSoilField(farm.soilProfile.sand),
+      clay: formatSoilField(farm.soilProfile.clay),
+      silt: formatSoilField(farm.soilProfile.silt),
+      ph: formatSoilField(farm.soilProfile.ph),
+      organic_carbon: formatSoilField(farm.soilProfile.organic_carbon_percent),
+    }));
+
+    try {
+      setIsFetchingWeather(true);
+      const response = await api.get("/weather", {
+        params: { location: farm.locationName },
+      });
+      applyWeatherData(response.data, farm.locationName);
+      toast.success(`${farm.name} loaded`);
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Farm selected, but weather lookup failed");
+    } finally {
+      setIsFetchingWeather(false);
+    }
+  };
+
   const handleSelectionChange = async (selection) => {
+    soilRequestIdRef.current += 1;
+    const requestId = soilRequestIdRef.current;
+
     setLandSelection(selection);
     setSoilProfile(null);
-    setResults(null);
 
     if (!selection) {
+      setIsFetchingSoil(false);
       setFormData((current) => ({
         ...current,
         acres: "",
         soil_type: "",
+        sand: "",
+        clay: "",
+        silt: "",
+        ph: "",
+        organic_carbon: "",
       }));
       return;
     }
@@ -97,6 +221,11 @@ export default function Simulator() {
       ...current,
       acres: selection.areaAcres.toFixed(2),
       soil_type: "",
+      sand: "",
+      clay: "",
+      silt: "",
+      ph: "",
+      organic_carbon: "",
     }));
 
     setIsFetchingSoil(true);
@@ -107,17 +236,34 @@ export default function Simulator() {
           lon: selection.center.lon,
         },
       });
-      setSoilProfile(response.data.soil_profile);
+
+      if (soilRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      const nextSoilProfile = response.data.soil_profile;
+      setSoilProfile(nextSoilProfile);
       setFormData((current) => ({
         ...current,
-        soil_type: response.data.soil_profile.soil_type,
+        soil_type: nextSoilProfile.soil_type,
         acres: selection.areaAcres.toFixed(2),
+        sand: formatSoilField(nextSoilProfile.sand),
+        clay: formatSoilField(nextSoilProfile.clay),
+        silt: formatSoilField(nextSoilProfile.silt),
+        ph: formatSoilField(nextSoilProfile.ph),
+        organic_carbon: formatSoilField(nextSoilProfile.organic_carbon_percent),
       }));
       toast.success("Soil data fetched");
     } catch (error) {
+      if (soilRequestIdRef.current !== requestId) {
+        return;
+      }
+
       toast.error(error.response?.data?.error || "Unable to fetch soil data");
     } finally {
-      setIsFetchingSoil(false);
+      if (soilRequestIdRef.current === requestId) {
+        setIsFetchingSoil(false);
+      }
     }
   };
 
@@ -131,12 +277,27 @@ export default function Simulator() {
         temperature: Number(formData.temperature),
         humidity: Number(formData.humidity),
         acres: Number(formData.acres),
-        soil_type: formData.soil_type || "Loamy",
+        soil_type: formData.soil_type || soilProfile?.soil_type || "Loamy",
+        selected_crops: selectedCrops,
       };
 
       const response = await api.post("/predict", payload);
-      setResults(response.data);
       toast.success("Simulation complete");
+      navigate("/simulator/results", {
+        state: {
+          simulationState: {
+            results: response.data,
+            formData,
+            weatherLocation,
+            weather,
+            landSelection,
+            soilProfile,
+            mapFocus,
+            selectedCrops,
+            selectedFarmId,
+          },
+        },
+      });
     } catch (error) {
       if (error.response?.status === 401 || error.response?.status === 422) {
         logout();
@@ -163,25 +324,8 @@ export default function Simulator() {
       const response = await api.get("/weather", {
         params: { location: weatherLocation.trim() },
       });
-      setWeather(response.data);
-      setFormData((current) => ({
-        ...current,
-        rainfall:
-          response.data.current_weather?.precipitation !== null &&
-          response.data.current_weather?.precipitation !== undefined
-            ? String(response.data.current_weather.precipitation)
-            : current.rainfall,
-        temperature:
-          response.data.current_weather?.temperature !== null &&
-          response.data.current_weather?.temperature !== undefined
-            ? String(response.data.current_weather.temperature)
-            : current.temperature,
-        humidity:
-          response.data.current_weather?.humidity !== null &&
-          response.data.current_weather?.humidity !== undefined
-            ? String(response.data.current_weather.humidity)
-            : current.humidity,
-      }));
+
+      applyWeatherData(response.data, weatherLocation.trim());
       toast.success("Weather fetched");
     } catch (error) {
       toast.error(error.response?.data?.error || "Unable to fetch weather");
@@ -195,14 +339,6 @@ export default function Simulator() {
     toast.success("Logged out");
     navigate("/login", { replace: true });
   };
-
-  const chartData = results
-    ? Object.entries(results.predictions).map(([crop, metrics]) => ({
-        crop,
-        totalYield: metrics.total_predicted_yield,
-        profit: metrics.profit,
-      }))
-    : [];
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(132,204,22,0.08),transparent_30%),linear-gradient(180deg,#0e1b11_0%,#142419_40%,#261d14_100%)] px-4 py-6 text-stone-50 sm:px-6 lg:px-8">
@@ -227,7 +363,7 @@ export default function Simulator() {
         </header>
 
         <section className="mb-6 grid gap-4 md:grid-cols-4">
-          <MetricCard icon={MapPinned} label="Land Mapping" value="Polygon Draw" helper="Draw and edit a boundary directly on the map." />
+          <MetricCard icon={MapPinned} label="Land Mapping" value="Polygon Draw" helper="Draw and redraw a boundary directly on the map." />
           <MetricCard icon={Droplets} label="Weather Inputs" value="Auto Fill" helper="Rainfall, temperature, and humidity come from live weather lookup." />
           <MetricCard icon={Trees} label="Soil Source" value="SoilGrids" helper="Soil type and composition are pulled from online soil data." />
           <MetricCard icon={Mountain} label="Area Tracking" value={`${formData.acres || "0"} acres`} helper="Simulation profit now scales with the selected land area." />
@@ -240,12 +376,12 @@ export default function Simulator() {
               <div>
                 <h2 className="text-2xl font-semibold">Land Selection</h2>
                 <p className="text-sm text-stone-300">
-                  Draw a polygon to calculate land area, find the center point, and fetch soil characteristics.
+                  Search a location to re-center the map, then click multiple points to draw a field polygon and fetch soil characteristics.
                 </p>
               </div>
             </div>
 
-            <LandSelectionMap onSelectionChange={handleSelectionChange} />
+            <LandSelectionMap onSelectionChange={handleSelectionChange} focusLocation={mapFocus} />
 
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-[1.25rem] border border-white/10 bg-black/10 p-4">
@@ -413,22 +549,44 @@ export default function Simulator() {
             ) : null}
 
             <p className="mt-4 text-sm text-stone-300">
-              After lookup, temperature, humidity, and precipitation are automatically filled into the simulator inputs below.
+              After lookup, temperature, humidity, and precipitation are automatically filled into the simulator inputs below and the map zooms to the searched location.
             </p>
           </section>
         </section>
 
-        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+        <div className="grid gap-6">
           <section className="rounded-[2rem] border border-white/10 bg-white/[0.08] p-6 shadow-glow backdrop-blur-xl">
             <div className="mb-6">
               <h2 className="text-2xl font-semibold">Field Inputs</h2>
               <p className="mt-2 text-sm text-stone-300">
-                Weather can auto-fill from the location lookup, while acreage and soil type come from the drawn land polygon.
+                Weather can auto-fill from the location lookup, while acreage and soil values come from the drawn land polygon.
               </p>
             </div>
 
             <form className="grid gap-5" onSubmit={handleSubmit}>
               <div className="grid gap-5 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-stone-100" htmlFor="selected_farm">
+                    Select Farm
+                  </label>
+                  <select
+                    id="selected_farm"
+                    value={selectedFarmId}
+                    onChange={handleFarmSelect}
+                    className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none transition focus:border-lime-300 focus:ring-4 focus:ring-lime-200/30"
+                  >
+                    <option value="">Choose a saved farm</option>
+                    {FARMS.map((farm) => (
+                      <option key={farm.id} value={farm.id}>
+                        {farm.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-sm text-stone-300">
+                    Selecting a farm auto-fills soil data, land area, map location, and weather location.
+                  </p>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-stone-100" htmlFor="rainfall">
                     Rainfall (mm)
@@ -503,7 +661,7 @@ export default function Simulator() {
               <div className="grid gap-5 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-stone-100" htmlFor="soil_type">
-                    Soil Type
+                    Soil Type (editable fallback)
                   </label>
                   <input
                     id="soil_type"
@@ -512,7 +670,7 @@ export default function Simulator() {
                     className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none"
                     value={formData.soil_type}
                     placeholder="Draw land polygon to fetch soil type"
-                    readOnly
+                    onChange={handleChange}
                   />
                 </div>
 
@@ -531,6 +689,97 @@ export default function Simulator() {
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-stone-100">Select Crops</label>
+                <CropMultiSelect
+                  value={selectedCrops}
+                  onChange={handleSelectedCropsChange}
+                  maxSelections={MAX_SELECTED_CROPS}
+                  error={cropSelectionError}
+                />
+                <p className="text-sm text-stone-300">
+                  Select up to {MAX_SELECTED_CROPS} crops to compare only those options. Leave empty to use automatic crop recommendation across all supported crops.
+                </p>
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-stone-100" htmlFor="sand">
+                    Sand (%)
+                  </label>
+                  <input
+                    id="sand"
+                    name="sand"
+                    type="number"
+                    step="0.01"
+                    className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none"
+                    value={formData.sand}
+                    onChange={handleChange}
+                    placeholder="Auto-filled from soil data"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-stone-100" htmlFor="clay">
+                    Clay (%)
+                  </label>
+                  <input
+                    id="clay"
+                    name="clay"
+                    type="number"
+                    step="0.01"
+                    className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none"
+                    value={formData.clay}
+                    onChange={handleChange}
+                    placeholder="Auto-filled from soil data"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-stone-100" htmlFor="silt">
+                    Silt (%)
+                  </label>
+                  <input
+                    id="silt"
+                    name="silt"
+                    type="number"
+                    step="0.01"
+                    className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none"
+                    value={formData.silt}
+                    onChange={handleChange}
+                    placeholder="Auto-filled from soil data"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-stone-100" htmlFor="ph">
+                    Soil pH
+                  </label>
+                  <input
+                    id="ph"
+                    name="ph"
+                    type="number"
+                    step="0.01"
+                    className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none"
+                    value={formData.ph}
+                    onChange={handleChange}
+                    placeholder="Auto-filled from soil data"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-stone-100" htmlFor="organic_carbon">
+                    Organic Carbon (%)
+                  </label>
+                  <input
+                    id="organic_carbon"
+                    name="organic_carbon"
+                    type="number"
+                    step="0.01"
+                    className="w-full rounded-2xl border border-white/10 bg-white/90 px-4 py-3 text-stone-900 outline-none"
+                    value={formData.organic_carbon}
+                    onChange={handleChange}
+                    placeholder="Auto-filled from soil data"
+                  />
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={isSubmitting}
@@ -539,119 +788,6 @@ export default function Simulator() {
                 {isSubmitting ? <LoadingSpinner size="sm" label="Simulating..." /> : "Simulate"}
               </button>
             </form>
-          </section>
-
-          <section className="rounded-[2rem] border border-white/10 bg-white/[0.08] p-6 shadow-glow backdrop-blur-xl">
-            <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold">Simulation Results</h2>
-                <p className="mt-2 text-sm text-stone-300">Compare total yield, dynamic pricing, and acreage-aware profitability after each run.</p>
-              </div>
-              {results?.recommended_crop ? (
-                <div className="rounded-2xl border border-lime-200/30 bg-lime-300/10 px-4 py-3 text-sm">
-                  <span className="text-stone-300">Best crop:</span>{" "}
-                  <span className="font-semibold text-lime-100">{results.recommended_crop.name}</span>
-                </div>
-              ) : null}
-            </div>
-
-            {results?.pricing ? (
-              <div className="mb-5 rounded-[1.5rem] border border-white/10 bg-black/10 p-4 text-sm text-stone-300">
-                Using prices from <span className="font-medium text-stone-100">{results.pricing.source}</span>.
-                Updated at {results.pricing.updated_at}
-              </div>
-            ) : null}
-
-            {!results ? (
-              <div className="flex h-full min-h-[420px] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-white/15 bg-black/10 px-6 text-center">
-                <div className="mb-4 rounded-full bg-lime-300/10 p-4 text-lime-200">
-                  <Sprout className="h-10 w-10 animate-float" />
-                </div>
-                <h3 className="text-xl font-semibold">No simulation yet</h3>
-                <p className="mt-2 max-w-md text-sm text-stone-300">
-                  Draw the land, fetch weather, and run the simulator to compare acreage-scaled crop predictions and profits.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-3">
-                  {Object.entries(results.predictions).map(([crop, metrics]) => {
-                    const isBestCrop = results.recommended_crop.name === crop;
-
-                    return (
-                      <article
-                        key={crop}
-                        className={`rounded-[1.5rem] border p-4 transition ${
-                          isBestCrop
-                            ? "border-lime-200/40 bg-lime-300/10 shadow-[0_0_0_1px_rgba(190,242,100,0.2)]"
-                            : "border-white/10 bg-black/10"
-                        }`}
-                      >
-                        <div className="mb-3 flex items-start justify-between gap-3">
-                          <div>
-                            <h3 className="text-xl font-semibold">{crop}</h3>
-                            <p className="mt-1 text-sm text-stone-300">{metrics.risk_level} risk</p>
-                          </div>
-                          {isBestCrop ? (
-                            <div className="rounded-full bg-lime-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-stone-900">
-                              Recommended
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div className="space-y-2 text-sm text-stone-200">
-                          <p>
-                            <span className="text-stone-400">Yield per acre:</span> {metrics.predicted_yield_per_acre}
-                          </p>
-                          <p>
-                            <span className="text-stone-400">Total yield:</span> {metrics.total_predicted_yield}
-                          </p>
-                          <p>
-                            <span className="text-stone-400">Price used:</span> ${metrics.unit_price}
-                          </p>
-                          <p>
-                            <span className="text-stone-400">Profit:</span> ${metrics.profit}
-                          </p>
-                          <p>
-                            <span className="text-stone-400">Explanation:</span> {metrics.explanation}
-                          </p>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/10 p-4">
-                  <div className="mb-4 flex items-center gap-2">
-                    <Leaf className="h-5 w-5 text-lime-200" />
-                    <h3 className="text-lg font-semibold">Total Yield Comparison</h3>
-                  </div>
-
-                  <div className="h-72 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.12)" />
-                        <XAxis dataKey="crop" stroke="#d6d3d1" />
-                        <YAxis stroke="#d6d3d1" />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#1c1917",
-                            border: "1px solid rgba(255,255,255,0.1)",
-                            borderRadius: "1rem",
-                            color: "#fafaf9",
-                          }}
-                        />
-                        <Bar dataKey="totalYield" radius={[12, 12, 0, 0]}>
-                          {chartData.map((entry) => (
-                            <Cell key={entry.crop} fill={cropColors[entry.crop]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            )}
           </section>
         </div>
       </div>
